@@ -454,6 +454,18 @@ public class StreetRouter {
 
         long startTime = System.currentTimeMillis();
 
+        // KOTI signal delay: propagate the route's departure time (seconds from
+        // midnight) into the turn-cost calculator so it can pick the time band
+        // (peak/offpeak/night). Only the basic calculator carries this field.
+        if (this.timeCalculator instanceof BasicTraversalTimeCalculator) {
+            ((BasicTraversalTimeCalculator) this.timeCalculator).fromTimeSeconds = profileRequest.fromTime;
+        } else if (this.timeCalculator instanceof MultistageTraversalTimeCalculator) {
+            TraversalTimeCalculator base = ((MultistageTraversalTimeCalculator) this.timeCalculator).base;
+            if (base instanceof BasicTraversalTimeCalculator) {
+                ((BasicTraversalTimeCalculator) base).fromTimeSeconds = profileRequest.fromTime;
+            }
+        }
+
         final int distanceLimitMm;
         //This is needed otherwise timeLimitSeconds gets changed and
         // on next call of route on same streetRouter wrong warnings are returned

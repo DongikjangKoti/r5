@@ -19,7 +19,7 @@ public class MultistageTraversalTimeCalculator implements TraversalTimeCalculato
 
     private static final Logger LOG = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-    private TraversalTimeCalculator base;
+    public TraversalTimeCalculator base;
 
     private List<CostField> costFields;
 

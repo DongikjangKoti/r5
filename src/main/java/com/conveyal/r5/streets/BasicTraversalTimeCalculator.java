@@ -27,6 +27,35 @@ public class BasicTraversalTimeCalculator implements TraversalTimeCalculator {
 
     public boolean driveOnRight; // TODO instead of a field, this should be a different implementation class
 
+    // ====== KOTI signal-delay extension ======================================
+    // Extra wait (seconds) added when a CAR turn ENTERS an intersection that has
+    // a traffic signal (VertexFlag.TRAFFIC_SIGNAL). Added ON TOP of the turn-angle
+    // cost above. Differentiated by movement (through / left / right) and by time
+    // band (peak / offpeak / night) selected from the route's departure time.
+    // Values are starting points (KOTI), tunable. Right turns ~ free in Korea.
+    // Index: [band][movement]  band 0=peak 1=offpeak 2=night; movement 0=through 1=left 2=right
+    public static int[][] SIGNAL_DELAY = {
+        // through, left, right
+        { 14, 12, 2 },  // peak    (07-09, 17-19)
+        {  8,  7, 0 },  // offpeak (other daytime)
+        {  3,  3, 0 }   // night   (22-06)
+    };
+    // Master switch: signal delay only applied when true (set by R5RCore/r5r).
+    public static boolean SIGNAL_DELAY_ENABLED = false;
+
+    // Departure seconds-from-midnight for the current route; set by StreetRouter.route().
+    // -1 means "unknown" → treated as offpeak.
+    public int fromTimeSeconds = -1;
+
+    private int timeBand() {
+        if (fromTimeSeconds < 0) return 1; // unknown → offpeak
+        int h = (fromTimeSeconds / 3600) % 24;
+        boolean peak  = (h >= 7 && h < 9) || (h >= 17 && h < 19);
+        boolean night = (h >= 22) || (h < 6);
+        return peak ? 0 : (night ? 2 : 1);
+    }
+    // =========================================================================
+
     public BasicTraversalTimeCalculator (StreetLayer layer, boolean driveOnRight) {
         this.layer = layer;
         this.driveOnRight = driveOnRight;
@@ -48,16 +77,33 @@ public class BasicTraversalTimeCalculator implements TraversalTimeCalculator {
     public int turnTimeSeconds (int fromEdge, int toEdge, StreetMode streetMode) {
         if (streetMode == StreetMode.CAR) {
             double angle = calculateNewTurnAngle(fromEdge, toEdge);
-            if (angle < 27)
-                return STRAIGHT_ON;
-            else if (angle < 153)
-                return driveOnRight ? LEFT_TURN : RIGHT_TURN;
-            else if (angle < 207)
-                return U_TURN;
-            else if (angle < 333)
-                return driveOnRight ? RIGHT_TURN : LEFT_TURN;
-            else
-                return STRAIGHT_ON;
+            int turnCost;
+            int movement; // 0=through, 1=left, 2=right (for signal-delay lookup)
+            if (angle < 27) {
+                turnCost = STRAIGHT_ON; movement = 0;
+            } else if (angle < 153) {
+                turnCost = driveOnRight ? LEFT_TURN : RIGHT_TURN;
+                movement = driveOnRight ? 1 : 2;
+            } else if (angle < 207) {
+                turnCost = U_TURN; movement = 1; // treat U-turn like left for signal band
+            } else if (angle < 333) {
+                turnCost = driveOnRight ? RIGHT_TURN : LEFT_TURN;
+                movement = driveOnRight ? 2 : 1;
+            } else {
+                turnCost = STRAIGHT_ON; movement = 0;
+            }
+
+            // KOTI signal delay: if the turn enters a signalized intersection, add
+            // a movement- and time-band-specific wait on top of the turn cost.
+            if (SIGNAL_DELAY_ENABLED) {
+                EdgeStore.Edge e = layer.edgeStore.getCursor(fromEdge);
+                int enteredVertex = e.getToVertex();
+                if (layer.vertexStore.getCursor(enteredVertex)
+                        .getFlag(VertexStore.VertexFlag.TRAFFIC_SIGNAL)) {
+                    turnCost += SIGNAL_DELAY[timeBand()][movement];
+                }
+            }
+            return turnCost;
         }
         return 0;
     }
