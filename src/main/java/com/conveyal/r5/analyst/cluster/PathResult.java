@@ -39,7 +39,9 @@ public class PathResult {
      * These results are returned to the backend over an HTTP API so we don't want to risk making them too huge.
      * This could be set to a higher number in cases where you know the result return channel can handle the size.
      */
-    public static final int MAX_PATH_DESTINATIONS = 5_000;
+    // KOTI 7.5.1-koti2: non-final so r5r can raise it to the destination count of an expanded
+    // travel time matrix (r5r R5Process.setDestinations). Default unchanged.
+    public static int MAX_PATH_DESTINATIONS = 5_000;
 
     private final int nDestinations;
     /**
